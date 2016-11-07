@@ -9,16 +9,16 @@ use std::result::Result as StdResult;
 
 use msg_error::{Error, Result};
 
-#[macro_use] mod json_macros;
-#[macro_use] mod msg_error;
+#[macro_use]
+mod json_macros;
+#[macro_use]
+mod msg_error;
 
-static IOS_TRIPLES: &'static [&'static str] = &[
-    "aarch64-apple-ios",
-    "armv7-apple-ios",
-    "armv7s-apple-ios",
-    "i386-apple-ios",
-    "x86_64-apple-ios",
-];
+static IOS_TRIPLES: &'static [&'static str] = &["aarch64-apple-ios",
+                                                "armv7-apple-ios",
+                                                "armv7s-apple-ios",
+                                                "i386-apple-ios",
+                                                "x86_64-apple-ios"];
 
 fn main() {
     if let Err(err) = real_main() {
@@ -29,14 +29,20 @@ fn main() {
 
 fn real_main() -> Result<()> {
     let matches = build_app().get_matches();
-    let matches = trm!("Invalid invocation"; matches.subcommand_matches("lipo").ok_or("subcommand required"));
+    let matches =
+        trm!("Invalid invocation"; matches.subcommand_matches("lipo").ok_or("subcommand required"));
 
     let release = matches.is_present("release");
     let verbose = matches.is_present("verbose");
 
     let lib_name = try!(find_lib_name(verbose));
 
-    for triple in IOS_TRIPLES {
+    let triples: Vec<&str> = match matches.values_of("targets") {
+        Some(values) => values.collect(),
+        None => IOS_TRIPLES.to_vec(),
+    };
+    println!("{:?}", triples);
+    for triple in &triples {
         try!(build_triple(triple, release, verbose));
     }
 
@@ -52,7 +58,7 @@ fn real_main() -> Result<()> {
     cmd.args(&["-create", "-output"]);
     cmd.arg(out.as_os_str());
 
-    for triple in IOS_TRIPLES {
+    for triple in &triples {
         cmd.arg(target_path.join(triple).join(target_subdir).join(&lib_name).as_os_str());
     }
 
@@ -67,15 +73,16 @@ fn build_app<'a, 'b>() -> App<'a, 'b> {
     App::new("cargo-lipo")
         .version(env!("CARGO_PKG_VERSION"))
         .author("Tim Neumann <mail@timnn.me>")
-        .about("This binary should only be executed as a custom cargo subcommand (ie. `cargo lipo`)")
+        .about("This binary should only be executed as a custom cargo subcommand (ie. `cargo \
+                lipo`)")
         .bin_name("cargo")
         .subcommand(SubCommand::with_name("lipo")
             .version(env!("CARGO_PKG_VERSION"))
             .author("Tim Neumann <mail@timnn.me>")
             .about("Automatically create universal libraries")
             .args_from_usage("--release 'Compiles in release mode'
-                              -v --verbose 'Print additional information'")
-        )
+                              --targets=[TRIPLES] 'Build for the target triples'
+                              -v --verbose 'Print additional information'"))
 }
 
 /// Invoke `cargo build` for the given triple.
@@ -83,8 +90,12 @@ fn build_triple(triple: &str, release: bool, verbose: bool) -> Result<()> {
     let mut cmd = Command::new("cargo");
     cmd.args(&["build", "--target", triple, "--lib"]);
 
-    if release { cmd.arg("--release"); }
-    if verbose { cmd.arg("--verbose"); }
+    if release {
+        cmd.arg("--release");
+    }
+    if verbose {
+        cmd.arg("--verbose");
+    }
 
     log_command(&cmd, verbose);
 
